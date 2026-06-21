@@ -1,0 +1,21 @@
+# Go
+dist/
+*.test
+*.out
+vendor/
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Secrets / local config
+.env
+*.log
+.ado-dash.yml
+.ado-dash.yaml
+.ado-dash.local.yml
+
+# Node (archived prototype)
+node_modules/

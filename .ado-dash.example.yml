@@ -1,0 +1,40 @@
+organizationUrl: https://dev.azure.com/YOUR_ORG
+project: YOUR_PROJECT
+
+# Choose one auth method.
+auth:
+  # Browser-based auth via Azure CLI. First run: az login
+  type: azure-cli
+  # Optional, useful if your Azure DevOps org is tied to a specific tenant:
+  # tenant: YOUR_TENANT_ID
+
+# PAT fallback:
+# auth:
+#   type: pat
+#   env: AZURE_DEVOPS_PAT
+
+defaults:
+  refreshSeconds: 120
+  limit: 20
+
+sections:
+  - title: My PRs
+    type: pullRequests
+    status: active
+    role: author
+
+  - title: Needs my review
+    type: pullRequests
+    status: active
+    role: reviewer
+
+  - title: Active work items
+    type: workItems
+    limit: 30
+    wiql: >-
+      SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType], [System.AssignedTo], [System.ChangedDate]
+      FROM WorkItems
+      WHERE [System.TeamProject] = @project
+        AND [System.AssignedTo] = @Me
+        AND [System.State] <> 'Closed'
+      ORDER BY [System.ChangedDate] DESC
