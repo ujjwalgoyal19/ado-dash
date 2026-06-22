@@ -39,12 +39,7 @@ go build ./cmd/ado-dash
 
 ## Config
 
-`ado-dash` looks for config in order:
-
-1. `--config /path/to/config.yml`
-2. `~/.config/ado-dash/config.yml`
-
-The first-run wizard creates the config file. See [PLAN.md](./PLAN.md) for the full schema.
+Config loading/writing is not yet implemented in the current scaffold; the `--config` flag is reserved for future slices. See [PLAN.md](./PLAN.md) for the planned schema.
 
 ## Development
 
