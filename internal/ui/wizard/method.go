@@ -67,8 +67,20 @@ func (m Method) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Method) View() string {
 	t := ui.ActiveTheme
-	fg := func(col lipgloss.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(col) }
-	fb := func(col lipgloss.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(col).Bold(true) }
+	baseBG := lipgloss.Color(t.Base)
+	fg := func(col lipgloss.Color) lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(col).Background(baseBG)
+	}
+	fb := func(col lipgloss.Color) lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(col).Background(baseBG).Bold(true)
+	}
+	fillRow := func(row string) string {
+		pad := wizW - lipgloss.Width(row)
+		if pad > 0 {
+			row += lipgloss.NewStyle().Background(baseBG).Render(strings.Repeat(" ", pad))
+		}
+		return row
+	}
 
 	inner := wizW - 2
 	title := " " + fb(t.Text).Render("ado-dash") + fg(t.Muted).Render("  ·  Sign in  (2/2)")
@@ -122,12 +134,16 @@ func (m Method) View() string {
 		dot + fg(t.Accent).Render("q") + fg(t.Muted).Render(" quit")
 	rows = append(rows, footer)
 
+	// Fill every row to wizW width with base background before centering.
+	for i, row := range rows {
+		rows[i] = fillRow(row)
+	}
+
 	dialog := strings.Join(rows, "\n")
 
-	// Center the fixed-size dialog in the live terminal.
 	if m.width > wizW || m.height > wizH {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, dialog,
-			lipgloss.WithWhitespaceBackground(lipgloss.Color(ui.ActiveTheme.Base)))
+			lipgloss.WithWhitespaceBackground(baseBG))
 	}
 	return dialog
 }

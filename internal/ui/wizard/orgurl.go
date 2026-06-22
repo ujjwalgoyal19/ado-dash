@@ -62,15 +62,28 @@ func isValidOrgURL(s string) bool {
 
 func (m OrgURL) View() string {
 	t := ui.ActiveTheme
-	fg := func(col lipgloss.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(col) }
-	fb := func(col lipgloss.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(col).Bold(true) }
+	baseBG := lipgloss.Color(t.Base)
+	fg := func(col lipgloss.Color) lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(col).Background(baseBG)
+	}
+	fb := func(col lipgloss.Color) lipgloss.Style {
+		return lipgloss.NewStyle().Foreground(col).Background(baseBG).Bold(true)
+	}
+	// fillRow pads a row to wizW with base background so no transparent gap shows.
+	fillRow := func(row string) string {
+		pad := wizW - lipgloss.Width(row)
+		if pad > 0 {
+			row += lipgloss.NewStyle().Background(baseBG).Render(strings.Repeat(" ", pad))
+		}
+		return row
+	}
 
 	inner := wizW - 2
 	title := " " + fb(t.Text).Render("ado-dash") + fg(t.Muted).Render("  ·  Sign in  (1/2)")
 
 	rows := []string{
 		fg(t.Subtle).Render("╭" + strings.Repeat("─", inner) + "╮"),
-		fg(t.Subtle).Render("│") + title + strings.Repeat(" ", inner-lipgloss.Width(title)) + fg(t.Subtle).Render("│"),
+		fg(t.Subtle).Render("│") + title + fg(t.Subtle).Render(strings.Repeat(" ", inner-lipgloss.Width(title))) + fg(t.Subtle).Render("│"),
 		fg(t.Subtle).Render("╰" + strings.Repeat("─", inner) + "╯"),
 		"",
 		"",
@@ -116,12 +129,16 @@ func (m OrgURL) View() string {
 		fg(t.Accent).Render("esc") + fg(t.Muted).Render(" quit")
 	rows = append(rows, footer)
 
+	// Fill every row to wizW width with base background before centering.
+	for i, row := range rows {
+		rows[i] = fillRow(row)
+	}
+
 	dialog := strings.Join(rows, "\n")
 
-	// Center the fixed-size dialog in the live terminal.
 	if m.width > wizW || m.height > wizH {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, dialog,
-			lipgloss.WithWhitespaceBackground(lipgloss.Color(t.Base)))
+			lipgloss.WithWhitespaceBackground(baseBG))
 	}
 	return dialog
 }
