@@ -1,0 +1,49 @@
+profiles:
+  - name: Work
+    organizationUrl: https://dev.azure.com/YOUR_ORG
+    auth:
+      # Browser-based auth via Azure CLI. First run: az login
+      type: azure-cli
+      # Optional, useful if your Azure DevOps org is tied to a specific tenant:
+      # tenant: YOUR_TENANT_ID
+
+  # PAT fallback:
+  # - name: Personal
+  #   organizationUrl: https://dev.azure.com/YOUR_ORG
+  #   auth:
+  #     type: pat
+  #     env: AZURE_DEVOPS_PAT
+
+defaults:
+  refreshSeconds: 120
+  limit: 20
+  openPrIn: detail
+
+sections:
+  pullRequests:
+    - title: My PRs
+      status: active
+      role: author
+
+    - title: Needs my review
+      status: active
+      role: reviewer
+
+  workItems:
+    - title: Active work items
+      limit: 30
+      wiql: >-
+        SELECT [System.Id], [System.Title], [System.State], [System.WorkItemType], [System.AssignedTo], [System.ChangedDate]
+        FROM WorkItems
+        WHERE [System.TeamProject] = @project
+          AND [System.AssignedTo] = @Me
+          AND [System.State] <> 'Closed'
+        ORDER BY [System.ChangedDate] DESC
+
+  pipelines:
+    - title: Recent runs
+      status: all
+
+  releases:
+    - title: Pending approval
+      status: pending
