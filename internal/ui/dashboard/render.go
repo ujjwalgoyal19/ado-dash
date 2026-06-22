@@ -1,6 +1,6 @@
 // Package dashboard renders the main PR dashboard screen.
 // Layout: header (3 rows) | sidebar (col 0-12) + content (col 13+) | footer (1 row).
-// All measurements match the design spec (140 cols × 40 rows canvas).
+// All dimensions are driven by the live terminal size passed into Render().
 package dashboard
 
 import (
@@ -12,11 +12,7 @@ import (
 	"github.com/ujjwalgoyal19/ado-dash/internal/ui"
 )
 
-const (
-	dashW = 140
-	dashH = 40
-	sbR   = 12 // sidebar right border column
-)
+const sbR = 12 // sidebar right border column (fixed width)
 
 // cell holds a rune + its lipgloss color slots.
 type cell struct {
@@ -188,10 +184,10 @@ func lpad(s string, w int) string {
 
 // ── Header ────────────────────────────────────────────────────────
 
-func drawHeader(cv *canvas, repo string) {
+func drawHeader(cv *canvas, repo string, width int) {
 	t := cv.theme
-	cv.fillBG(0, 0, 3, dashW, t.Surface)
-	cv.box(0, 0, 3, dashW, t.Subtle, true)
+	cv.fillBG(0, 0, 3, width, t.Surface)
+	cv.box(0, 0, 3, width, t.Subtle, true)
 
 	c := 2
 	cv.put(1, c, "ado-dash", t.Text, bold(), bg(t.Surface))
@@ -201,7 +197,7 @@ func drawHeader(cv *canvas, repo string) {
 	cv.put(1, c, "  /  ", t.Subtle, bg(t.Surface))
 	c += 5
 	cv.put(1, c, repo, t.Blue, bg(t.Surface))
-	cv.putR(1, dashW-3, "[⚙]  [👤] ", t.Muted, bg(t.Surface))
+	cv.putR(1, width-3, "[⚙]  [👤] ", t.Muted, bg(t.Surface))
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────
@@ -473,7 +469,7 @@ var dashFooter = []footerSeg{
 
 func drawFooter(cv *canvas, r int, segs []footerSeg) {
 	t := cv.theme
-	cv.fillBG(r, 0, 1, dashW, t.Surface)
+	cv.fillBG(r, 0, 1, cv.cols, t.Surface)
 	c := 2
 	for i, s := range segs {
 		cv.put(r, c, s.k, t.Accent, bg(t.Surface))
@@ -491,16 +487,25 @@ func drawFooter(cv *canvas, r int, segs []footerSeg) {
 
 // Render builds the complete dashboard view string for the given repo and
 // selected PR index.
-func Render(repo string, selIdx int, prs []PR) string {
+// Render builds the complete dashboard view string sized to the live terminal.
+// width and height come from tea.WindowSizeMsg; fall back to 140×40 if zero.
+func Render(repo string, selIdx int, prs []PR, width, height int) string {
+	if width < 40 {
+		width = 140
+	}
+	if height < 10 {
+		height = 40
+	}
+
 	t := ui.ActiveTheme
-	cv := newCanvas(dashH, dashW, t)
+	cv := newCanvas(height, width, t)
 
 	// Header (rows 0-2)
-	drawHeader(cv, repo)
+	drawHeader(cv, repo, width)
 
-	// Outer content box (rows 3-37)
-	top, bot := 3, 37
-	cv.box(top, 0, bot-top+1, dashW, t.Subtle, false)
+	// Outer content box: rows 3 .. height-3; footer at height-1.
+	top, bot := 3, height-3
+	cv.box(top, 0, bot-top+1, width, t.Subtle, false)
 	cv.vline(top+1, bot-1, sbR, t.Subtle)
 	cv.put(top, sbR, "┬", t.Subtle)
 	cv.put(bot, sbR, "┴", t.Subtle)
@@ -508,7 +513,7 @@ func Render(repo string, selIdx int, prs []PR) string {
 	// Sidebar
 	drawSidebar(cv, top, bot, len(prs))
 
-	// Tab bar (row 4) + divider (row 5)
+	// Tab bar + divider
 	tabs := []tab{
 		{"My PRs", fmt.Sprintf("%d", len(prs)), true, false},
 		{"Review", "5", false, false},
@@ -517,9 +522,10 @@ func Render(repo string, selIdx int, prs []PR) string {
 	}
 	drawTabBar(cv, top+1, sbR, tabs)
 
-	// Vertical preview divider at col 95
-	prevDiv := 95
-	c0, c1 := sbR, dashW-1
+	// Preview divider: 65% of available content width.
+	c0, c1 := sbR, width-1
+	contentW := c1 - c0
+	prevDiv := c0 + (contentW * 65 / 100)
 
 	// Tab divider + preview column junctions
 	cv.hline(top+2, c0+1, c1-1, t.Subtle)
@@ -553,8 +559,8 @@ func Render(repo string, selIdx int, prs []PR) string {
 		cv.putR(bot-1, c1-2, "↳ d to open", t.Muted)
 	}
 
-	// Footer (row 39)
-	drawFooter(cv, 39, dashFooter)
+	// Footer
+	drawFooter(cv, height-1, dashFooter)
 
 	return cv.render()
 }

@@ -12,8 +12,10 @@ import (
 
 // OrgURL is the first wizard step: enter the Azure DevOps org URL.
 type OrgURL struct {
-	input textinput.Model
-	err   string
+	input  textinput.Model
+	err    string
+	width  int
+	height int
 }
 
 func NewOrgURL() OrgURL {
@@ -30,6 +32,10 @@ func (m OrgURL) Init() tea.Cmd { return textinput.Blink }
 
 func (m OrgURL) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
@@ -72,7 +78,6 @@ func (m OrgURL) View() string {
 		"",
 	}
 
-	// Input box: col 10, width 40 (38 inner).
 	inInner := 38
 	lpad := strings.Repeat(" ", 10)
 	bc := fg(t.Purple)
@@ -111,5 +116,12 @@ func (m OrgURL) View() string {
 		fg(t.Accent).Render("esc") + fg(t.Muted).Render(" quit")
 	rows = append(rows, footer)
 
-	return strings.Join(rows, "\n")
+	dialog := strings.Join(rows, "\n")
+
+	// Center the fixed-size dialog in the live terminal.
+	if m.width > wizW || m.height > wizH {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, dialog,
+			lipgloss.WithWhitespaceBackground(lipgloss.Color(t.Base)))
+	}
+	return dialog
 }

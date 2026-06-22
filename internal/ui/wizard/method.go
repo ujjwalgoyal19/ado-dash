@@ -26,6 +26,8 @@ var methodItems = []methodItem{
 type Method struct {
 	orgURL string
 	cursor int
+	width  int
+	height int
 }
 
 func NewMethod(orgURL string) Method { return Method{orgURL: orgURL} }
@@ -34,6 +36,10 @@ func (m Method) Init() tea.Cmd { return nil }
 
 func (m Method) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
@@ -116,5 +122,12 @@ func (m Method) View() string {
 		dot + fg(t.Accent).Render("q") + fg(t.Muted).Render(" quit")
 	rows = append(rows, footer)
 
-	return strings.Join(rows, "\n")
+	dialog := strings.Join(rows, "\n")
+
+	// Center the fixed-size dialog in the live terminal.
+	if m.width > wizW || m.height > wizH {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, dialog,
+			lipgloss.WithWhitespaceBackground(lipgloss.Color(ui.ActiveTheme.Base)))
+	}
+	return dialog
 }

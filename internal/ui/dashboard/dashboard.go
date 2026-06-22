@@ -2,8 +2,6 @@ package dashboard
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/ujjwalgoyal19/ado-dash/internal/ui"
 )
 
 // Model is the main dashboard Bubble Tea model.
@@ -48,6 +46,5 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	_ = ui.ActiveTheme // ensure theme is referenced
-	return Render(m.repo, m.selIdx, m.prs)
+	return Render(m.repo, m.selIdx, m.prs, m.width, m.height)
 }
