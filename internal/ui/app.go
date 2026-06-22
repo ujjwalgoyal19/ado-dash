@@ -35,6 +35,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return a, tea.Quit
 		}
+	case PushMsg:
+		a.stack = append(a.stack, msg.Model)
+		return a, msg.Model.Init()
+	case PopMsg:
+		if len(a.stack) > 1 {
+			a.stack = a.stack[:len(a.stack)-1]
+		}
+		return a, nil
+	case ReplaceMsg:
+		a.stack = []tea.Model{msg.Model}
+		return a, msg.Model.Init()
 	}
 	updated, cmd := a.stack[len(a.stack)-1].Update(msg)
 	a.stack[len(a.stack)-1] = updated

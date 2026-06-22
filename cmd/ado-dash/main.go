@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"os"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
+
+	"github.com/ujjwalgoyal19/ado-dash/internal/ui"
+	"github.com/ujjwalgoyal19/ado-dash/internal/ui/wizard"
 )
 
 // version is set at build time via goreleaser ldflags.
@@ -18,7 +22,11 @@ func main() {
 		Short:   "Terminal dashboard for Azure DevOps",
 		Version: version,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("ado-dash: TUI not yet implemented. Run --help for options.")
+			app := ui.New(wizard.NewOrgURL())
+			p := tea.NewProgram(app, tea.WithAltScreen())
+			if _, err := p.Run(); err != nil {
+				return fmt.Errorf("ui: %w", err)
+			}
 			return nil
 		},
 	}
