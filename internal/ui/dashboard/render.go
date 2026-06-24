@@ -17,6 +17,9 @@ const sbR = 12 // sidebar right border column (fixed width)
 // ── Helpers ───────────────────────────────────────────────────────
 
 func rpad(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
 	r := []rune(s)
 	if len(r) >= w {
 		return string(r[:w])
@@ -151,7 +154,7 @@ func calcCols(c0, c1 int) listCols {
 	authX := repoX - 1 - authW
 	stateX := left + 8
 	titleX := stateX + 10
-	titleW := authX - 2 - titleX
+	titleW := max(0, authX-2-titleX)
 	_ = left
 	return listCols{stateX - 8, stateX, titleX, titleW, authX, authW, repoX, repoW, ageEnd}
 }
