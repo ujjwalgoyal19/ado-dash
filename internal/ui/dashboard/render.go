@@ -14,156 +14,6 @@ import (
 
 const sbR = 12 // sidebar right border column (fixed width)
 
-// cell holds a rune + its lipgloss color slots.
-type cell struct {
-	ch   rune
-	fg   lipgloss.Color
-	bg   lipgloss.Color
-	bold bool
-	dim  bool
-}
-
-// canvas is a character-grid renderer that mirrors the design's term.jsx approach.
-type canvas struct {
-	rows, cols int
-	cells      [][]cell
-	theme      ui.Theme
-}
-
-func newCanvas(rows, cols int, t ui.Theme) *canvas {
-	cells := make([][]cell, rows)
-	for r := range cells {
-		cells[r] = make([]cell, cols)
-		for c := range cells[r] {
-			cells[r][c] = cell{ch: ' ', fg: t.Text, bg: t.Base}
-		}
-	}
-	return &canvas{rows: rows, cols: cols, cells: cells, theme: t}
-}
-
-// put writes str at (r,c) with the given style options.
-func (cv *canvas) put(r, c int, str string, fg lipgloss.Color, opts ...option) {
-	o := applyOpts(opts)
-	for i, ch := range str {
-		cc := c + i
-		if r < 0 || r >= cv.rows || cc < 0 || cc >= cv.cols {
-			continue
-		}
-		cell := &cv.cells[r][cc]
-		cell.ch = ch
-		cell.fg = fg
-		cell.bold = o.bold
-		cell.dim = o.dim
-		if o.bg != "" {
-			cell.bg = o.bg
-		}
-	}
-}
-
-func (cv *canvas) putR(r, endCol int, str string, fg lipgloss.Color, opts ...option) {
-	cv.put(r, endCol-len([]rune(str))+1, str, fg, opts...)
-}
-
-func (cv *canvas) fillBG(r0, c0, h, w int, bg lipgloss.Color) {
-	for r := r0; r < r0+h; r++ {
-		for c := c0; c < c0+w; c++ {
-			if r >= 0 && r < cv.rows && c >= 0 && c < cv.cols {
-				cv.cells[r][c].bg = bg
-			}
-		}
-	}
-}
-
-func (cv *canvas) hline(r, c0, c1 int, fg lipgloss.Color) {
-	for c := c0; c <= c1; c++ {
-		cv.put(r, c, "─", fg)
-	}
-}
-
-func (cv *canvas) vline(r0, r1, c int, fg lipgloss.Color) {
-	for r := r0; r <= r1; r++ {
-		cv.put(r, c, "│", fg)
-	}
-}
-
-func (cv *canvas) box(r0, c0, h, w int, fg lipgloss.Color, rounded bool) {
-	r1, c1 := r0+h-1, c0+w-1
-	tl, tr, bl, br := "┌", "┐", "└", "┘"
-	if rounded {
-		tl, tr, bl, br = "╭", "╮", "╰", "╯"
-	}
-	cv.hline(r0, c0+1, c1-1, fg)
-	cv.hline(r1, c0+1, c1-1, fg)
-	cv.vline(r0+1, r1-1, c0, fg)
-	cv.vline(r0+1, r1-1, c1, fg)
-	cv.put(r0, c0, tl, fg)
-	cv.put(r0, c1, tr, fg)
-	cv.put(r1, c0, bl, fg)
-	cv.put(r1, c1, br, fg)
-}
-
-// render converts the canvas to a string with ANSI color codes.
-func (cv *canvas) render() string {
-	var sb strings.Builder
-	for ri, row := range cv.cells {
-		var i int
-		for i < len(row) {
-			// group consecutive cells with the same styling
-			start := i
-			for i < len(row) &&
-				row[i].fg == row[start].fg &&
-				row[i].bg == row[start].bg &&
-				row[i].bold == row[start].bold &&
-				row[i].dim == row[start].dim {
-				i++
-			}
-			run := row[start:i]
-			var runes []rune
-			for _, cl := range run {
-				runes = append(runes, cl.ch)
-			}
-			s := string(runes)
-			st := lipgloss.NewStyle().Foreground(run[0].fg)
-			if run[0].bg != cv.theme.Base {
-				st = st.Background(run[0].bg)
-			}
-			if run[0].bold {
-				st = st.Bold(true)
-			}
-			if run[0].dim {
-				st = st.Faint(true)
-			}
-			sb.WriteString(st.Render(s))
-		}
-		if ri < cv.rows-1 {
-			sb.WriteByte('\n')
-		}
-	}
-	return sb.String()
-}
-
-// ── option helpers ────────────────────────────────────────────────
-
-type opts struct {
-	bold bool
-	dim  bool
-	bg   lipgloss.Color
-}
-
-type option func(*opts)
-
-func bold() option          { return func(o *opts) { o.bold = true } }
-func dim() option           { return func(o *opts) { o.dim = true } }
-func bg(c lipgloss.Color) option { return func(o *opts) { o.bg = c } }
-
-func applyOpts(os []option) opts {
-	var o opts
-	for _, fn := range os {
-		fn(&o)
-	}
-	return o
-}
-
 // ── Helpers ───────────────────────────────────────────────────────
 
 func rpad(s string, w int) string {
@@ -182,22 +32,29 @@ func lpad(s string, w int) string {
 	return strings.Repeat(" ", w-len(r)) + s
 }
 
+func boolBold(b bool) ui.CanvasOpt {
+	if b {
+		return ui.Bold()
+	}
+	return ui.Noop()
+}
+
 // ── Header ────────────────────────────────────────────────────────
 
-func drawHeader(cv *canvas, repo string, width int) {
-	t := cv.theme
-	cv.fillBG(0, 0, 3, width, t.Surface)
-	cv.box(0, 0, 3, width, t.Subtle, true)
+func drawHeader(cv *ui.Canvas, repo string, width int) {
+	t := cv.Theme
+	cv.FillBG(0, 0, 3, width, t.Surface)
+	cv.Box(0, 0, 3, width, t.Subtle, true)
 
 	c := 2
-	cv.put(1, c, "ado-dash", t.Text, bold(), bg(t.Surface))
+	cv.Put(1, c, "ado-dash", t.Text, ui.Bold(), ui.BG(t.Surface))
 	c += 8
-	cv.put(1, c, "  my-company / MyProject", t.Muted, bg(t.Surface))
+	cv.Put(1, c, "  my-company / MyProject", t.Muted, ui.BG(t.Surface))
 	c += 24
-	cv.put(1, c, "  /  ", t.Subtle, bg(t.Surface))
+	cv.Put(1, c, "  /  ", t.Subtle, ui.BG(t.Surface))
 	c += 5
-	cv.put(1, c, repo, t.Blue, bg(t.Surface))
-	cv.putR(1, width-3, "[⚙]  [👤] ", t.Muted, bg(t.Surface))
+	cv.Put(1, c, repo, t.Blue, ui.BG(t.Surface))
+	cv.PutR(1, width-3, "[⚙]  [👤] ", t.Muted, ui.BG(t.Surface))
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────
@@ -214,8 +71,8 @@ var sidebarItems = []struct {
 	{"Rel", "1", false, false},
 }
 
-func drawSidebar(cv *canvas, r0, rb int, prCount int) {
-	t := cv.theme
+func drawSidebar(cv *ui.Canvas, r0, rb int, prCount int) {
+	t := cv.Theme
 	r := r0 + 1
 	for _, it := range sidebarItems {
 		cnt := it.count
@@ -223,15 +80,15 @@ func drawSidebar(cv *canvas, r0, rb int, prCount int) {
 			cnt = fmt.Sprintf("%d", prCount)
 		}
 		if it.active {
-			cv.put(r, 1, "▶", t.Purple)
-			cv.put(r, 3, it.label, t.Text, bold())
-			cv.putR(r, 9, cnt, t.Muted)
+			cv.Put(r, 1, "▶", t.Purple)
+			cv.Put(r, 3, it.label, t.Text, ui.Bold())
+			cv.PutR(r, 9, cnt, t.Muted)
 			if it.badge {
-				cv.put(r, 11, "●", t.Badge)
+				cv.Put(r, 11, "●", t.Badge)
 			}
 		} else {
-			cv.put(r, 3, it.label, t.Muted)
-			cv.putR(r, 9, cnt, t.Muted)
+			cv.Put(r, 3, it.label, t.Muted)
+			cv.PutR(r, 9, cnt, t.Muted)
 		}
 		r++
 	}
@@ -246,34 +103,34 @@ type tab struct {
 	dot    bool
 }
 
-func drawTabBar(cv *canvas, r, c0 int, tabs []tab) {
-	t := cv.theme
+func drawTabBar(cv *ui.Canvas, r, c0 int, tabs []tab) {
+	t := cv.Theme
 	c := c0 + 1
 	for _, tb := range tabs {
 		br := t.Subtle
 		if tb.active {
 			br = t.Purple
 		}
-		cv.put(r, c, "[ ", br)
+		cv.Put(r, c, "[ ", br)
 		c += 2
 		if tb.active {
-			cv.put(r, c, tb.label, t.Text, bold())
+			cv.Put(r, c, tb.label, t.Text, ui.Bold())
 		} else {
-			cv.put(r, c, tb.label, t.Muted)
+			cv.Put(r, c, tb.label, t.Muted)
 		}
 		c += len([]rune(tb.label))
 		countStr := "  " + tb.count
 		if tb.active {
-			cv.put(r, c, countStr, t.Text, bold())
+			cv.Put(r, c, countStr, t.Text, ui.Bold())
 		} else {
-			cv.put(r, c, countStr, t.Muted)
+			cv.Put(r, c, countStr, t.Muted)
 		}
 		c += len([]rune(countStr))
 		if tb.dot {
-			cv.put(r, c, " ●", t.Badge)
+			cv.Put(r, c, " ●", t.Badge)
 			c += 2
 		}
-		cv.put(r, c, " ]", br)
+		cv.Put(r, c, " ]", br)
 		c += 4
 	}
 }
@@ -299,16 +156,16 @@ func calcCols(c0, c1 int) listCols {
 	return listCols{stateX - 8, stateX, titleX, titleW, authX, authW, repoX, repoW, ageEnd}
 }
 
-func drawListHeader(cv *canvas, r, c0, c1 int) {
-	t := cv.theme
+func drawListHeader(cv *ui.Canvas, r, c0, c1 int) {
+	t := cv.Theme
 	x := calcCols(c0, c1)
-	cv.put(r, x.idX, "#", t.Muted)
-	cv.put(r, x.stateX, "STATE", t.Muted)
-	cv.put(r, x.titleX, "TITLE", t.Muted)
-	cv.put(r, x.authX, "AUTHOR", t.Muted)
-	cv.put(r, x.repoX, "REPO", t.Muted)
-	cv.putR(r, x.ageEnd, "AGE", t.Muted)
-	cv.hline(r+1, c0+1, c1-1, t.Subtle)
+	cv.Put(r, x.idX, "#", t.Muted)
+	cv.Put(r, x.stateX, "STATE", t.Muted)
+	cv.Put(r, x.titleX, "TITLE", t.Muted)
+	cv.Put(r, x.authX, "AUTHOR", t.Muted)
+	cv.Put(r, x.repoX, "REPO", t.Muted)
+	cv.PutR(r, x.ageEnd, "AGE", t.Muted)
+	cv.HLine(r+1, c0+1, c1-1, t.Subtle)
 }
 
 var stateColor = map[string]func(ui.Theme) lipgloss.Color{
@@ -318,19 +175,19 @@ var stateColor = map[string]func(ui.Theme) lipgloss.Color{
 	"closed": func(t ui.Theme) lipgloss.Color { return t.Muted },
 }
 
-func drawPRRow(cv *canvas, r, c0, c1 int, pr PR, selected bool) {
-	t := cv.theme
+func drawPRRow(cv *ui.Canvas, r, c0, c1 int, pr PR, selected bool) {
+	t := cv.Theme
 	x := calcCols(c0, c1)
 	if selected {
-		cv.fillBG(r, c0+1, 1, c1-c0-1, t.Overlay)
-		cv.put(r, c0, "▶", t.Purple)
+		cv.FillBG(r, c0+1, 1, c1-c0-1, t.Overlay)
+		cv.Put(r, c0, "▶", t.Purple)
 	}
 
 	idFG := t.Blue
 	if pr.Flag == flagFailed {
 		idFG = t.Red
 	}
-	cv.put(r, x.idX, rpad(pr.ID, 7), idFG, boolBold(selected))
+	cv.Put(r, x.idX, rpad(pr.ID, 7), idFG, boolBold(selected))
 
 	stateFG := t.Green
 	if cf, ok := stateColor[pr.State]; ok {
@@ -340,49 +197,41 @@ func drawPRRow(cv *canvas, r, c0, c1 int, pr PR, selected bool) {
 		stateFG = t.Yellow
 	}
 	isDim := pr.Flag == flagDraft
-	stOpts := []option{boolBold(selected)}
+	stOpts := []ui.CanvasOpt{boolBold(selected)}
 	if isDim {
-		stOpts = append(stOpts, dim())
+		stOpts = append(stOpts, ui.Dim())
 	}
-	cv.put(r, x.stateX, rpad(pr.State, 9), stateFG, stOpts...)
+	cv.Put(r, x.stateX, rpad(pr.State, 9), stateFG, stOpts...)
 
 	if isDim {
 		area := x.titleW - 8
-		cv.put(r, x.titleX, rpad(pr.Title, area), t.Muted, dim())
-		cv.put(r, x.titleX+area+1, "[draft]", t.Yellow)
+		cv.Put(r, x.titleX, rpad(pr.Title, area), t.Muted, ui.Dim())
+		cv.Put(r, x.titleX+area+1, "[draft]", t.Yellow)
 	} else {
-		cv.put(r, x.titleX, rpad(pr.Title, x.titleW), t.Text, boolBold(selected))
+		cv.Put(r, x.titleX, rpad(pr.Title, x.titleW), t.Text, boolBold(selected))
 	}
 
-	cv.put(r, x.authX, rpad(pr.Author, x.authW), t.Muted, boolBold(selected))
-	cv.put(r, x.repoX, rpad(pr.Repo, x.repoW), t.Muted, boolBold(selected))
-	cv.putR(r, x.ageEnd, pr.Age, t.Muted, boolBold(selected))
-}
-
-func boolBold(b bool) option {
-	if b {
-		return bold()
-	}
-	return func(*opts) {}
+	cv.Put(r, x.authX, rpad(pr.Author, x.authW), t.Muted, boolBold(selected))
+	cv.Put(r, x.repoX, rpad(pr.Repo, x.repoW), t.Muted, boolBold(selected))
+	cv.PutR(r, x.ageEnd, pr.Age, t.Muted, boolBold(selected))
 }
 
 // ── Preview pane ──────────────────────────────────────────────────
 
-func drawPreview(cv *canvas, r0, c0, c1 int, pr *PR) {
-	t := cv.theme
+func drawPreview(cv *ui.Canvas, r0, c0, c1 int, pr *PR) {
+	t := cv.Theme
 	L := c0 + 2
 	if pr == nil {
 		msg := "No item selected"
-		cv.put(r0+12, c0+(c1-c0-len(msg))/2, msg, t.Muted)
+		cv.Put(r0+12, c0+(c1-c0-len(msg))/2, msg, t.Muted)
 		return
 	}
 
 	r := r0 + 1
 	num := strings.TrimLeft(strings.TrimPrefix(pr.ID, "PR"), "0")
-	cv.put(r, L, "PR "+num, t.Blue, bold())
+	cv.Put(r, L, "PR "+num, t.Blue, ui.Bold())
 	r++
 
-	// wrap title to 2 lines
 	W := c1 - L - 1
 	words := strings.Fields(pr.Title)
 	var lines []string
@@ -401,13 +250,13 @@ func drawPreview(cv *canvas, r0, c0, c1 int, pr *PR) {
 		lines = append(lines, cur)
 	}
 	for _, l := range lines[:min(2, len(lines))] {
-		cv.put(r, L, l, t.Text, bold())
+		cv.Put(r, L, l, t.Text, ui.Bold())
 		r++
 	}
 	r++
 
-	cv.put(r, L, pr.Author, t.Blue)
-	cv.put(r, L+len(pr.Author), " → main", t.Muted)
+	cv.Put(r, L, pr.Author, t.Blue)
+	cv.Put(r, L+len(pr.Author), " → main", t.Muted)
 	r++
 
 	sfg := t.Green
@@ -417,25 +266,25 @@ func drawPreview(cv *canvas, r0, c0, c1 int, pr *PR) {
 	if cf, ok := stateColor[pr.State]; ok {
 		sfg = cf(t)
 	}
-	cv.put(r, L, pr.State, sfg)
-	cv.put(r, L+len(pr.State), " · "+pr.Age+" ago", t.Muted)
+	cv.Put(r, L, pr.State, sfg)
+	cv.Put(r, L+len(pr.State), " · "+pr.Age+" ago", t.Muted)
 	r += 2
 
-	cv.put(r, L, fmt.Sprintf("%d reviewers · %d approved", pr.Reviewers, pr.Approved), t.Muted)
+	cv.Put(r, L, fmt.Sprintf("%d reviewers · %d approved", pr.Reviewers, pr.Approved), t.Muted)
 	r += 2
 
 	if pr.Approved > 0 {
-		cv.put(r, L, "✓", t.Green)
-		cv.put(r, L+2, fmt.Sprintf("%d approved", pr.Approved), t.Text)
+		cv.Put(r, L, "✓", t.Green)
+		cv.Put(r, L+2, fmt.Sprintf("%d approved", pr.Approved), t.Text)
 	} else {
-		cv.put(r, L, "–", t.Muted)
-		cv.put(r, L+2, "no approvals yet", t.Muted)
+		cv.Put(r, L, "–", t.Muted)
+		cv.Put(r, L+2, "no approvals yet", t.Muted)
 	}
 	r++
 
 	if pr.Waiting > 0 {
-		cv.put(r, L, "⏳", t.Yellow)
-		cv.put(r, L+3, fmt.Sprintf("%d waiting", pr.Waiting), t.Text)
+		cv.Put(r, L, "⏳", t.Yellow)
+		cv.Put(r, L+3, fmt.Sprintf("%d waiting", pr.Waiting), t.Text)
 		r++
 	}
 
@@ -446,16 +295,16 @@ func drawPreview(cv *canvas, r0, c0, c1 int, pr *PR) {
 	case buildRun:
 		bldIcon, bldFG, bldMsg = "⏳", t.Yellow, "Build running"
 	}
-	cv.put(r, L, bldIcon, bldFG)
-	cv.put(r, L+2, bldMsg, t.Text)
+	cv.Put(r, L, bldIcon, bldFG)
+	cv.Put(r, L+2, bldMsg, t.Text)
 	r++
 
 	wiIcon, wiFG := "✓", t.Green
 	if !pr.WorkItem {
 		wiIcon, wiFG = "✗", t.Red
 	}
-	cv.put(r, L, wiIcon, wiFG)
-	cv.put(r, L+2, "Work item linked", t.Text)
+	cv.Put(r, L, wiIcon, wiFG)
+	cv.Put(r, L+2, "Work item linked", t.Text)
 }
 
 // ── Footer ────────────────────────────────────────────────────────
@@ -467,17 +316,17 @@ var dashFooter = []footerSeg{
 	{"\\", "sidebar"}, {"Z", "zen"}, {"?", "help"}, {"q", "quit"},
 }
 
-func drawFooter(cv *canvas, r int, segs []footerSeg) {
-	t := cv.theme
-	cv.fillBG(r, 0, 1, cv.cols, t.Surface)
+func drawFooter(cv *ui.Canvas, r int, segs []footerSeg) {
+	t := cv.Theme
+	cv.FillBG(r, 0, 1, cv.Cols, t.Surface)
 	c := 2
 	for i, s := range segs {
-		cv.put(r, c, s.k, t.Accent, bg(t.Surface))
+		cv.Put(r, c, s.k, t.Accent, ui.BG(t.Surface))
 		c += len([]rune(s.k))
-		cv.put(r, c, " "+s.d, t.Muted, bg(t.Surface))
+		cv.Put(r, c, " "+s.d, t.Muted, ui.BG(t.Surface))
 		c += len(s.d) + 1
 		if i < len(segs)-1 {
-			cv.put(r, c, "  ·  ", t.Subtle, bg(t.Surface))
+			cv.Put(r, c, "  ·  ", t.Subtle, ui.BG(t.Surface))
 			c += 5
 		}
 	}
@@ -485,8 +334,6 @@ func drawFooter(cv *canvas, r int, segs []footerSeg) {
 
 // ── Build full dashboard ─────────────────────────────────────────
 
-// Render builds the complete dashboard view string for the given repo and
-// selected PR index.
 // Render builds the complete dashboard view string sized to the live terminal.
 // width and height come from tea.WindowSizeMsg; fall back to 140×40 if zero.
 func Render(repo string, selIdx int, prs []PR, width, height int) string {
@@ -498,22 +345,18 @@ func Render(repo string, selIdx int, prs []PR, width, height int) string {
 	}
 
 	t := ui.ActiveTheme
-	cv := newCanvas(height, width, t)
+	cv := ui.NewCanvas(height, width, t)
 
-	// Header (rows 0-2)
 	drawHeader(cv, repo, width)
 
-	// Outer content box: rows 3 .. height-3; footer at height-1.
 	top, bot := 3, height-3
-	cv.box(top, 0, bot-top+1, width, t.Subtle, false)
-	cv.vline(top+1, bot-1, sbR, t.Subtle)
-	cv.put(top, sbR, "┬", t.Subtle)
-	cv.put(bot, sbR, "┴", t.Subtle)
+	cv.Box(top, 0, bot-top+1, width, t.Subtle, false)
+	cv.VLine(top+1, bot-1, sbR, t.Subtle)
+	cv.Put(top, sbR, "┬", t.Subtle)
+	cv.Put(bot, sbR, "┴", t.Subtle)
 
-	// Sidebar
 	drawSidebar(cv, top, bot, len(prs))
 
-	// Tab bar + divider
 	tabs := []tab{
 		{"My PRs", fmt.Sprintf("%d", len(prs)), true, false},
 		{"Review", "5", false, false},
@@ -522,20 +365,16 @@ func Render(repo string, selIdx int, prs []PR, width, height int) string {
 	}
 	drawTabBar(cv, top+1, sbR, tabs)
 
-	// Preview divider: 65% of available content width.
 	c0, c1 := sbR, width-1
-	contentW := c1 - c0
-	prevDiv := c0 + (contentW * 65 / 100)
+	prevDiv := c0 + ((c1-c0)*65/100)
 
-	// Tab divider + preview column junctions
-	cv.hline(top+2, c0+1, c1-1, t.Subtle)
-	cv.put(top+2, c0, "├", t.Subtle)
-	cv.put(top+2, c1, "┤", t.Subtle)
-	cv.put(top+2, prevDiv, "┬", t.Subtle)
-	cv.put(bot, prevDiv, "┴", t.Subtle)
-	cv.vline(top+3, bot-1, prevDiv, t.Subtle)
+	cv.HLine(top+2, c0+1, c1-1, t.Subtle)
+	cv.Put(top+2, c0, "├", t.Subtle)
+	cv.Put(top+2, c1, "┤", t.Subtle)
+	cv.Put(top+2, prevDiv, "┬", t.Subtle)
+	cv.Put(bot, prevDiv, "┴", t.Subtle)
+	cv.VLine(top+3, bot-1, prevDiv, t.Subtle)
 
-	// PR list
 	listTop := top + 2
 	if len(prs) > 0 {
 		drawListHeader(cv, listTop+1, c0, prevDiv)
@@ -549,20 +388,18 @@ func Render(repo string, selIdx int, prs []PR, width, height int) string {
 		}
 	}
 
-	// Preview pane
 	var sel *PR
 	if selIdx >= 0 && selIdx < len(prs) {
 		sel = &prs[selIdx]
 	}
 	drawPreview(cv, listTop, prevDiv, c1, sel)
 	if sel != nil {
-		cv.putR(bot-1, c1-2, "↳ d to open", t.Muted)
+		cv.PutR(bot-1, c1-2, "↳ d to open", t.Muted)
 	}
 
-	// Footer
 	drawFooter(cv, height-1, dashFooter)
 
-	return cv.render()
+	return cv.Render()
 }
 
 func min(a, b int) int {

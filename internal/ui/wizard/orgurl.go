@@ -62,83 +62,69 @@ func isValidOrgURL(s string) bool {
 
 func (m OrgURL) View() string {
 	t := ui.ActiveTheme
-	baseBG := lipgloss.Color(t.Base)
-	fg := func(col lipgloss.Color) lipgloss.Style {
-		return lipgloss.NewStyle().Foreground(col).Background(baseBG)
-	}
-	fb := func(col lipgloss.Color) lipgloss.Style {
-		return lipgloss.NewStyle().Foreground(col).Background(baseBG).Bold(true)
-	}
-	// fillRow pads a row to wizW with base background so no transparent gap shows.
-	fillRow := func(row string) string {
-		pad := wizW - lipgloss.Width(row)
-		if pad > 0 {
-			row += lipgloss.NewStyle().Background(baseBG).Render(strings.Repeat(" ", pad))
-		}
-		return row
-	}
+	cv := ui.NewCanvas(wizH, wizW, t)
 
-	inner := wizW - 2
-	title := " " + fb(t.Text).Render("ado-dash") + fg(t.Muted).Render("  ·  Sign in  (1/2)")
+	// Header box (rows 0-2)
+	cv.FillBG(0, 0, 3, wizW, t.Surface)
+	cv.Box(0, 0, 3, wizW, t.Subtle, true)
+	title := " ado-dash"
+	cv.Put(1, 1, "ado-dash", t.Text, ui.Bold(), ui.BG(t.Surface))
+	cv.Put(1, 1+len([]rune(title))-1, "  ·  Sign in  (1/2)", t.Muted, ui.BG(t.Surface))
 
-	rows := []string{
-		fg(t.Subtle).Render("╭" + strings.Repeat("─", inner) + "╮"),
-		fg(t.Subtle).Render("│") + title + fg(t.Subtle).Render(strings.Repeat(" ", inner-lipgloss.Width(title))) + fg(t.Subtle).Render("│"),
-		fg(t.Subtle).Render("╰" + strings.Repeat("─", inner) + "╯"),
-		"",
-		"",
-		strings.Repeat(" ", 10) + fg(t.Text).Render("Enter your Azure DevOps organization URL:"),
-		"",
-	}
+	// Prompt (row 5)
+	cv.Put(5, 10, "Enter your Azure DevOps organization URL:", t.Text)
 
+	// Input box (rows 7-9): col 10, inner width 38
 	inInner := 38
-	lpad := strings.Repeat(" ", 10)
-	bc := fg(t.Purple)
+	inL := 10
+	bc := t.Purple
 	if m.err != "" {
-		bc = fg(t.Red)
+		bc = t.Red
 	}
+	cv.Box(7, inL, 3, inInner+2, bc, false)
 
-	inputContent := " " + m.input.View()
-	rightPad := strings.Repeat(" ", max(0, inInner-1-lipgloss.Width(inputContent)))
-	rows = append(rows,
-		lpad+bc.Render("┌"+strings.Repeat("─", inInner)+"┐"),
-		lpad+bc.Render("│")+inputContent+rightPad+bc.Render("│"),
-		lpad+bc.Render("└"+strings.Repeat("─", inInner)+"┘"),
-	)
-
-	if m.err != "" {
-		rows = append(rows,
-			lpad+"  "+fg(t.Red).Render("✗ "+m.err),
-			"",
-		)
+	// Inline text input — write the rendered value into the canvas row by col.
+	// The textinput renders itself; we extract the visible text manually to keep
+	// the canvas background uniform.
+	val := m.input.Value()
+	if val == "" {
+		// placeholder
+		cv.Put(8, inL+1, " "+m.input.Placeholder, t.Muted)
 	} else {
-		rows = append(rows, "", "")
+		cv.Put(8, inL+1, " "+val, t.Text)
+	}
+	// cursor block
+	cursorCol := inL + 2 + len([]rune(val))
+	if cursorCol < inL+inInner {
+		cv.Put(8, cursorCol, "█", t.Accent)
 	}
 
-	rows = append(rows,
-		lpad+fg(t.Muted).Render("e.g.  https://dev.azure.com/my-company"),
-		strings.Repeat(" ", 16)+fg(t.Muted).Render("https://my-company.visualstudio.com"),
-	)
-
-	for len(rows) < wizH-1 {
-		rows = append(rows, "")
+	// Error or blank rows (10-11)
+	if m.err != "" {
+		cv.Put(10, inL+2, "✗ "+m.err, t.Red)
 	}
 
-	footer := " " + fg(t.Accent).Render("enter") + fg(t.Muted).Render(" confirm") +
-		fg(t.Subtle).Render("  ·  ") +
-		fg(t.Accent).Render("esc") + fg(t.Muted).Render(" quit")
-	rows = append(rows, footer)
+	// Examples (rows 12-13)
+	cv.Put(12, inL, "e.g.  https://dev.azure.com/my-company", t.Muted)
+	cv.Put(13, inL+6, "https://my-company.visualstudio.com", t.Muted)
 
-	// Fill every row to wizW width with base background before centering.
-	for i, row := range rows {
-		rows[i] = fillRow(row)
-	}
+	// Footer (row wizH-1)
+	c := 1
+	cv.Put(wizH-1, c, "enter", t.Accent)
+	c += 5
+	cv.Put(wizH-1, c, " confirm", t.Muted)
+	c += 8
+	cv.Put(wizH-1, c, "  ·  ", t.Subtle)
+	c += 5
+	cv.Put(wizH-1, c, "esc", t.Accent)
+	c += 3
+	cv.Put(wizH-1, c, " quit", t.Muted)
 
-	dialog := strings.Join(rows, "\n")
+	dialog := cv.Render()
 
 	if m.width > wizW || m.height > wizH {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, dialog,
-			lipgloss.WithWhitespaceBackground(baseBG))
+			lipgloss.WithWhitespaceBackground(lipgloss.Color(t.Base)))
 	}
 	return dialog
 }
